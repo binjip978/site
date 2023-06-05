@@ -1,0 +1,51 @@
+/* styles.css */
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #fbf1c7;
+    color: #3c3836;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background-color: #fabd2f;
+    padding: 22px;
+}
+
+h1 {
+    color: #3c3836;
+    margin: 0;
+    font-size: 36px;
+}
+
+.intro,
+.technical,
+.contact {
+    padding: 40px;
+}
+
+.intro {
+    background-color: #feefcb;
+}
+
+.technical {
+    background-color: #d5c4a1;
+}
+
+h2 {
+    color: #3c3836;
+    font-size: 30px;
+    margin-top: 0;
+}
+
+p {
+    font-size: 23px;
+    line-height: 1.5;
+}
+
+ul {
+    list-style-type: disc;
+    margin-left: 20px;
+    font-size: 21px;
+}
