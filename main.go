@@ -1,31 +1,23 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 
 	"golang.org/x/crypto/acme/autocert"
 )
 
-//go:embed content/index.html
-var index []byte
-
-//go:embed content/styles.css
-var style []byte
+//go:embed static
+var static embed.FS
 
 func main() {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-		log.Println("/index.html")
-		w.Header().Set("Content-Type", "text/html")
-		w.Write(index)
-	})
-	mux.HandleFunc("/styles.css", func(w http.ResponseWriter, _ *http.Request) {
-		log.Println("/styles.css")
-		w.Header().Set("Content-Type", "text/css")
-		w.Write(style)
-	})
-
+	static, err := fs.Sub(static, "static")
+	if err != nil {
+		log.Fatal(err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(static)))
 	log.Fatal(http.Serve(autocert.NewListener("binjip978.net"), mux))
 }
