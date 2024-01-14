@@ -10,18 +10,19 @@ body {
 
 header {
     background-color: #fabd2f;
-    padding: 22px;
+    padding: 16px;
 }
 
 h1 {
     color: #3c3836;
     margin: 0;
-    font-size: 36px;
+    font-size: 22px;
 }
 
 .intro,
-.technical,
-.contact {
+.projects,
+.contact,
+.blog {
     padding: 40px;
 }
 
@@ -29,23 +30,28 @@ h1 {
     background-color: #feefcb;
 }
 
-.technical {
+.projects {
     background-color: #d5c4a1;
 }
 
 h2 {
     color: #3c3836;
-    font-size: 30px;
+    font-size: 20px;
     margin-top: 0;
 }
 
 p {
-    font-size: 23px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+pre {
+    font-size: 14px;
     line-height: 1.5;
 }
 
 ul {
     list-style-type: disc;
-    margin-left: 20px;
-    font-size: 21px;
+    margin-left: 14px;
+    font-size: 15px;
 }

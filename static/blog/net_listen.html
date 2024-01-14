@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go networking interfaces</title>
+    <link rel="stylesheet" href="../styles.css">
+</head>
+
+<body>
+    <section class="blog">
+        <h1>Go networking interfaces</h1>
+
+        <p>Go has a high level networking API and not provide socket API from net package, you can reach them via
+            syscall package if you need, but instead Go provide primitives like net.Dial, net.Listen that give a
+            net.Conn interface, but this interface will have generic Read/Write method but their behaviour depends on
+            underlying connection.
+
+        <p>Example of a simple UDP server, that try to respond to client:
+
+        <pre>
+package main
+
+import (
+    "fmt"
+    "log"
+    "net"
+)
+
+func main() {
+    conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 1234})
+    if err != nil {
+        panic(err)
+    }
+
+    b := make([]byte, 1024)
+    for {
+        n, err := conn.Read(b)
+        if err != nil {
+            log.Println(err)
+        }
+
+        fmt.Printf("Received: %s\n", b[:n])
+
+        n, err = conn.Write([]byte("Hello from server"))
+        if err != nil {
+            log.Println(n, err)
+        }
+    }
+}
+</pre>
+
+        <p> If we connect to the server using netcat we will be able to read data from a client, but it will fail to
+            send "Hello from server".
+
+        <pre>
+nc -u 127.0.0.1 1234
+hello
+
+./server
+Received: hello
+2024/01/14 09:40:24 0 write udp [::]:1234: write: destination address required
+</pre>
+
+        <p> The error is "EDESTADDRREQ The socket is not connection-mode, and no peer address is set.", this fix is
+            simple if you plan to respond the the client you better to know client address, this can be done by using
+            UDPConn ReadFrom and WriteTo methods. This is expected because UDP is connectionless, but when I see method
+            like Write I expect to be able to send response.
+
+        <pre>
+package main
+
+import (
+    "fmt"
+    "log"
+    "net"
+)
+
+func main() {
+    conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 1234})
+    if err != nil {
+        panic(err)
+    }
+
+    b := make([]byte, 1024)
+    for {
+        n, addr, err := conn.ReadFromUDP(b)
+        if err != nil {
+            log.Println(err)
+        }
+
+        fmt.Printf("Received: %s\n", b[:n])
+
+        n, err = conn.WriteToUDP([]byte("Hello from server"), addr)
+        if err != nil {
+            log.Println(n, err)
+        }
+    }
+}
+</pre>
+
+        <pre>
+nc -u 127.0.0.1 1234
+hello
+Hello from server^C
+
+./server
+Received: hello    
+</pre>
+
+        <p>Actually in Linux it's possible to create a connected socket over an unconnected one <a
+                href="https://blog.cloudflare.com/everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1">everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1</a>,
+            but it's quite hacky and require reaching syscall package.
+
+        <p>But the problem we no longer have generic net.Conn interface and Read/Write works only in one way.
+
+    </section>
+
+</body>
