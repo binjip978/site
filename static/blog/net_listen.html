@@ -12,10 +12,7 @@
     <section class="blog">
         <h1>Go networking interfaces</h1>
 
-        <p>Go has a high level networking API and not provide socket API from net package, you can reach them via
-            syscall package if you need, but instead Go provide primitives like net.Dial, net.Listen that give a
-            net.Conn interface, but this interface will have generic Read/Write method but their behaviour depends on
-            underlying connection.
+        <p> Go provides a high-level networking API and does not directly expose socket-level functionality through the net package. However, you can access socket-level operations via the syscall package if necessary. Instead, Go offers primitives like net.Dial and net.Listen that return a net.Conn interface, which provides generic Read and Write methods whose behaviour depends on the underlying connection.
 
         <p>Example of a simple UDP server, that try to respond to client:
 
@@ -63,10 +60,7 @@ Received: hello
 2024/01/14 09:40:24 0 write udp [::]:1234: write: destination address required
 </pre>
 
-        <p> The error is "EDESTADDRREQ The socket is not connection-mode, and no peer address is set.", this fix is
-            simple if you plan to respond the the client you better to know client address, this can be done by using
-            UDPConn ReadFrom and WriteTo methods. This is expected because UDP is connectionless, but when I see method
-            like Write I expect to be able to send response.
+        <p> The error message "EDESTADDRREQ The socket is not connection-mode, and no peer address is set." indicates that you are trying to send data to a client using a UDP socket without first determining the client's address. To resolve this issue, you should use the UDPConn's ReadFrom and WriteTo methods to read the client's address and then send your response to that address. The problem here is that net.Conn interface or net.UDPConn have Write method that not really works in UDP case. 
 
         <pre>
 package main
@@ -113,7 +107,7 @@ Received: hello
                 href="https://blog.cloudflare.com/everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1">everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1</a>,
             but it's quite hacky and require reaching syscall package.
 
-        <p>But the problem we no longer have generic net.Conn interface and Read/Write works only in one way.
+        <p>But the problem we no longer have generic net.Conn interface and Read/Write works only in one way. That sad, because Read/Write methods is very useful in Go.
 
     </section>
 
