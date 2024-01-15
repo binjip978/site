@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go networking interfaces</title>
+    <title>Go networking surprises</title>
     <link rel="stylesheet" href="../styles.css">
     <link rel="icon" href="data:,">
 </head>
 
 <body>
     <section class="blog">
-        <h1>Go networking interfaces</h1>
+        <h1>Go networking surprises</h1>
 
         <p> Go provides a high-level networking API and does not directly expose socket-level functionality through the net package. However, you can access socket-level operations via the syscall package if necessary. Instead, Go offers primitives like net.Dial and net.Listen that return a net.Conn interface, which provides generic Read and Write methods whose behaviour depends on the underlying connection.
 
@@ -47,7 +47,7 @@ func main() {
         }
     }
 }
-</pre>
+    </pre>
 
         <p> If we connect to the server using netcat we will be able to read data from a client, but it will fail to
             send "Hello from server".
@@ -59,7 +59,7 @@ hello
 ./server
 Received: hello
 2024/01/14 09:40:24 0 write udp [::]:1234: write: destination address required
-</pre>
+        </pre>
 
         <p> The error message "EDESTADDRREQ The socket is not connection-mode, and no peer address is set." indicates that you are trying to send data to a client using a UDP socket without first determining the client's address. To resolve this issue, you should use the UDPConn's ReadFrom and WriteTo methods to read the client's address and then send your response to that address. The problem here is that net.Conn interface or net.UDPConn have Write method that not really works in UDP case. 
 
@@ -93,7 +93,7 @@ func main() {
         }
     }
 }
-</pre>
+        </pre>
 
         <pre>
 nc -u 127.0.0.1 1234
@@ -102,7 +102,7 @@ Hello from server^C
 
 ./server
 Received: hello    
-</pre>
+        </pre>
 
         <p>Actually in Linux it's possible to create a connected socket over an unconnected one <a
                 href="https://blog.cloudflare.com/everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1">everything-you-ever-wanted-to-know-about-udp-sockets-but-were-afraid-to-ask-part-1</a>,
@@ -110,6 +110,81 @@ Received: hello
 
         <p>But the problem we no longer have generic net.Conn interface and Read/Write works only in one way. That sad, because Read/Write methods is very useful in Go.
 
-    </section>
+        <p>Other interesting program is about sending ICMP request using net.Dial:
 
+        <pre>
+package main
+
+import (
+    "log"
+    "net"
+    "os"
+
+    "golang.org/x/net/icmp"
+    "golang.org/x/net/ipv4"
+)
+
+const host = "8.8.8.8"
+
+func main() {
+    conn, err := net.Dial("ip4:icmp", host)
+    if err != nil {
+        panic(err)
+    }
+    defer conn.Close()
+
+    wm := icmp.Message{
+        Type: ipv4.ICMPTypeEcho, Code: 0,
+        Body: &icmp.Echo{
+            ID: os.Getpid() & 0xffff, Seq: 121,
+            Data: []byte("HELLO-R-U-THERE"),
+        },
+    }
+
+    wb, err := wm.Marshal(nil)
+    if err != nil {
+        panic(err)
+    }
+
+    if _, err := conn.Write(wb); err != nil {
+        panic(err)
+    }
+
+    rb := make([]byte, 1500)
+    n, err := conn.Read(rb)
+    if err != nil {
+        panic(err)
+    }
+
+    // what we read from connection
+    for _, b := range rb[:n] {
+        fmt.Printf("%02x ", b)
+    }
+    fmt.Println()
+
+    rm, err := icmp.ParseMessage(ipv4.ICMPTypeEchoReply.Protocol(), rb[:n])
+    if err != nil {
+        panic(err)
+    }
+
+    switch rm.Type {
+    case ipv4.ICMPTypeEchoReply:
+        log.Printf("got reflection from %v", host)
+    default:
+        log.Printf("got %+v; want echo reply", rm)
+    }
+}
+        </pre>
+        <p>I can send a ping and receive a response, but the icmp.ParseMessage function will parse nonsense, because the rb buffer will contain the entire IP packet, including the ICMP payload. Also IP part will be different in Wireshark and from print statement, the first line from Wireshark: 
+        <pre>
+45 00 <b>00 2c</b> 00 00 00 00 fb 01 ed cd 08 08 08 08 c0 a8 01 4b
+45 00 <b>18 00</b> 00 00 00 00 fb 01 ed cd 08 08 08 08 c0 a8 01 4b
+        </pre>
+        <p>The length is different 0x002c (44 bytes) in wireshark and 0x1800 from debug statement, 0x1800 don't make any sense to me. The rest looks good:
+        <pre>
+00 00 88 10 0d a1 00 79 48 45 4c 4c 4f 2d 52 2d 55 2d 54 48 45 52 45 21
+00 00 88 10 0d a1 00 79 48 45 4c 4c 4f 2d 52 2d 55 2d 54 48 45 52 45 21
+        </pre>
+        <p>To accurately parse the ICMP response, we need to skip the first 20 bytes of the rb buffer and then call icmp.ParseMessage on the remaining bytes. When I use icmp.ListenPacket("ip4:icmp", "0.0.0.0") I got only ICMP payload in buffer. So net.Dial quite handy, but require extra work afterwards.
+    </section>
 </body>
