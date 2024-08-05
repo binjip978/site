@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go networking surprises</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="icon" href="data:,">
+</head>
+
+<body>
+    <section class="blog">
+        <h1>Minimal UART driver for RP2040</h1>
+
+        <p>Some time ago, I started learning embedded programming using RP2040 ARM processor and Pico board. Pico C/C++ SDK is really great and pleasant to work with. But it's very high level, and I actually wanted to get some bare-metal experience. My first project was blinking a LED without SDK support. I struggle a bit with reading manual and basically followed the SDK to toggle the required memory mapped registers to make it happen. The next project was a little bit more ambitious: to write actual minimal UART driver to get serial console, with only three function - uart_min_init, uart_write_byte and uart_read_byte - no configuration at all and one byte at a time. To write UART driver the most important document is RP2040 datasheet, all information presented here can be found in UART and GPIO sections.
+
+        <p>To read and write bytes with the serial console, we need these registers:
+            <ul>
+              <li>UARTDR (Data Register)</li>
+              <li>UARTFR (Flag Register)</li>
+              <li>UARTIBRD (Integer Part Baud Rate Register)</li>
+              <li>UARTFBRD (Fractional Part Baud Rate Register)</li>
+              <li>UARTLCR_H (Line Control Register)</li>
+              <li>UARTCR (Control Register)</li>
+            </ul>
+        </p>
+
+        <p>The Data Register contains different errors that we ignore for sake of simplicity and use only first 0:7 (8 bits) for transmitting and receiving one byte at a time.
+        <p>The Flag Register contains important signals like if UART is busy, are we ready to send or receive next byte. For minimal UART, we need only two bits TXFF and RXFE. These bits responsible for signaling if we can get or put byte into the serial console.
+        <p>Baud Rate Integer/Fractional Registers are needed to configure baud rate. They are complicated but datasheet actually provide exactly two number 67 and 52 the we need to set in init function.
+        <p>The Line Control Register used to specify things like number of bits in flight, parity and FIFO on/off.
+        <p>The Control Register can help us setup RT/TX and enable/disable the whole peripheral.
+
+        <p>The biggest part of the driver is the init function, because driver doesn't have any configuration, it will work only with default UART pins GP0 and GP1. To make these pins work in UART mode, the CTRL register should have value 2. After that, the UART peripheral need to be configured. To do that, we need to disable it first by writing 0 in the Control Register. The most complex part is to get values for baud rate, details are in datasheet, but for configuration perspective only two registers need to be updated. After baud rate is done, we want to setup UART in 8N1 mode, this is basically are default, only two bits need to written in Line Control Register. And the last step is to enable TX/RX and UART itself by writing 3 bits in the Control Register.
+        </p>
+
+        <p>The simplest way to read a byte from UART is to poll a specific bit in Flag Register for read function, it should be RXFE bit. If it's is one that means, that holding register is empty, if it not than we can get our byte from the Data Register.</p>
+
+        <p>It basically the same for writing byte, polling the TXFF bit and when it's zero, we can write next byte to the peripheral.<p>
+<pre>
+#include &lt;stdint.h&gt;
+
+#define GPIO_BASE 0x40014000
+#define GPIO0_CTRL (volatile uint32_t*)(GPIO_BASE + 0x004)
+#define GPIO1_CTRL (volatile uint32_t*)(GPIO_BASE + 0x00c)
+
+#define UART_MODE 2
+
+#define UART0_BASE  0x40034000
+#define UART0_DR    (volatile uint32_t*)(UART0_BASE)
+#define UART0_FR    (volatile uint32_t*)(UART0_BASE + 0x018)
+#define UART0_IBRD  (volatile uint32_t*)(UART0_BASE + 0x024)
+#define UART0_FBRD  (volatile uint32_t*)(UART0_BASE + 0x028)
+#define UART0_LCR_H (volatile uint32_t*)(UART0_BASE + 0x02c)
+#define UART0_CR    (volatile uint32_t*)(UART0_BASE + 0x030)
+
+void uart_min_init() {
+    // set GP0 and GP1 in UART mode
+    *GPIO0_CTRL = UART_MODE;
+    *GPIO1_CTRL = UART_MODE;
+
+    // disable uart
+    *UART0_CR = 0;
+
+    // Baud rate register some magic for BRD register
+    *UART0_IBRD = 67;
+    *UART0_FBRD = 52;
+
+    // Line control register no FIFO 8N1
+    *UART0_LCR_H = 0b11 << 5;
+
+    // enable TX/RX and UART
+    *UART0_CR = (1 << 9) | (1 << 8) | (1 << 0);
+}
+
+char uart_read_byte() {
+    while ((*UART0_FR >> 4) & 1) {}
+    char b = *UART0_DR;
+    return b;
+}
+
+void uart_write_byte(char c) {
+    while ((*UART0_FR >> 5) & 1) {}
+    *UART0_DR = c;
+}
+
+int main() {
+    uart_min_init();
+
+    char b;
+
+    while (1) {
+        b = uart_read_byte();
+        uart_write_byte(b + 1);
+    }
+}
+</pre>
+    </section>
+</body>
